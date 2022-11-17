@@ -11,3 +11,6 @@ SET PATH=^
 
 start "" "SourceDir\Program Files\TortoiseGit\bin\TortoiseGitProc.exe" /command:commit /path:%1
 pause
+
+
+[Appendix D. Automating TortoiseGit – TortoiseGit – Documentation – TortoiseGit – Windows Shell Interface to Git](https://tortoisegit.org/docs/tortoisegit/tgit-automation.html)
