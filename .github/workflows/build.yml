@@ -38,6 +38,6 @@ jobs:
       - name: Release prebuilt
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "installation/SourceDir/Program Files/TortoiseGit/${{ env.targetZip }}"
+          artifacts: "\"installation/SourceDir/Program Files/TortoiseGit/${{ env.targetZip }}\""
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
