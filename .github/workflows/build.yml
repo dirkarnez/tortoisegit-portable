@@ -26,7 +26,7 @@ jobs:
       - name: uncompress
         shell: cmd
         run: |
-          .\lessmsi\lessmsi.exe x "installer.msi" ".\installation\"
+          .\lessmsi\lessmsi.exe x "installer.msi" "installation\"
 
       - name: Archive Release
         uses: thedoctor0/zip-release@master
