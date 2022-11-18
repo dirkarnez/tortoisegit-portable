@@ -32,12 +32,12 @@ jobs:
         uses: thedoctor0/zip-release@master
         with:
           type: 'zip'
-          directory: '"installation/SourceDir/Program Files/TortoiseGit\"'
+          directory: "installation/SourceDir/Program\ Files/TortoiseGit"
           filename: "${{ env.targetZip }}"
           
       - name: Release prebuilt
         uses: ncipollo/release-action@v1
         with:
-          artifacts: '"installation/SourceDir/Program Files/TortoiseGit/${{ env.targetZip }}"'
+          artifacts: "installation/SourceDir/Program\ Files/TortoiseGit/${{ env.targetZip }}"
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
