@@ -27,17 +27,23 @@ jobs:
         shell: cmd
         run: |
           .\lessmsi\lessmsi.exe x "installer.msi" "installation\"
+          
+      - name: rename Program Files
+        shell: cmd
+        run: |
+          cd installation\SourceDir &&^
+          rename "Program Files" "Program_Files"
 
       - name: Archive Release
         uses: thedoctor0/zip-release@master
         with:
           type: 'zip'
-          directory: "installation/SourceDir/Program\ Files/TortoiseGit"
+          directory: "installation/SourceDir/Program_Files/TortoiseGit"
           filename: "${{ env.targetZip }}"
           
       - name: Release prebuilt
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "installation/SourceDir/Program\ Files/TortoiseGit/${{ env.targetZip }}"
+          artifacts: "installation/SourceDir/Program_Files/TortoiseGit/${{ env.targetZip }}"
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
