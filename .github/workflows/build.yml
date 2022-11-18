@@ -16,7 +16,7 @@ jobs:
       - name: installer
         shell: cmd
         run: |
-          curl https://download.tortoisegit.org/tgit/2.13.0.0/TortoiseGit-2.13.0.1-64bit.msi -L --output installer.exe 
+          curl https://download.tortoisegit.org/tgit/2.13.0.0/TortoiseGit-2.13.0.1-64bit.msi -L --output installer.msi 
           
       - name: lessmsi 
         shell: cmd
