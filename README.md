@@ -10,8 +10,8 @@ tortoisegit-portable
     SET PATH=^
     %DOWNLOADS_DIR%;^
     %DOWNLOADS_DIR%\PortableGit\bin;
-
-    start "" "TortoiseGitProc.exe" /command:commit /path:%1
+    
+    start "" "%~dp0TortoiseGitProc.exe" /command:commit /path:%1
     pause
     ```
   - `/command:settings`
