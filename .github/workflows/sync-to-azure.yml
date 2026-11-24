@@ -1,7 +1,7 @@
 name: sync-to-azure
 
-on: 
-  push
+on:
+  workflow_dispatch: # manual trigger only (Actions tab -> sync-to-azure -> Run workflow)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
