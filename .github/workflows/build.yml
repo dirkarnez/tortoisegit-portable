@@ -3,47 +3,81 @@ on:
   push:
     # Sequence of patterns matched against refs/tags
     tags:
-      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
-      - 'c*' # Push events to matching v*, i.e. v1.0, v20.15.10
-      
+      - 'v*' # e.g. v2.19.2.0
+      - 'c*'
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create/update the release
+
 jobs:
   build:
     name: Create Release
-    runs-on: windows-2019
+    runs-on: windows-latest
     env:
+      # TortoiseGit release to package. Download folders are named after the
+      # minor release (2.19.0.0), the files after the exact build (2.19.2.0).
+      TGIT_VERSION: 2.19.2.0
+      LESSMSI_VERSION: 2.12.9
       targetZip: tortoisegit-portable-${{ github.ref_name }}.zip
+    defaults:
+      run:
+        shell: pwsh
     steps:
-      - name: installer
-        shell: cmd
+      - name: Download installer
         run: |
-          curl https://download.tortoisegit.org/tgit/2.13.0.0/TortoiseGit-2.13.0.1-64bit.msi -L --output installer.msi 
-          
-      - name: lessmsi 
-        shell: cmd
-        run: | 
-          curl https://github.com/activescott/lessmsi/releases/download/v1.10.0/lessmsi-v1.10.0.zip -L --output lessmsi.zip && 7z.exe x lessmsi.zip -o"lessmsi"
-          
-      - name: uncompress
-        shell: cmd
-        run: |
-          .\lessmsi\lessmsi.exe x "installer.msi" "installation\"
-          
-      - name: rename Program Files
-        shell: cmd
-        run: |
-          cd installation\SourceDir &&^
-          rename "Program Files" "Program_Files"
+          $v = [version]$env:TGIT_VERSION
+          $url = "https://download.tortoisegit.org/tgit/$($v.Major).$($v.Minor).0.0/TortoiseGit-$env:TGIT_VERSION-64bit.msi"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest $url -OutFile installer.msi
 
-      - name: Archive Release
-        uses: thedoctor0/zip-release@master
+      - name: Verify installer signature
+        run: |
+          $sig = Get-AuthenticodeSignature installer.msi
+          Write-Host "$($sig.Status): $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'CN=Open Source Developer Sven Strickroth') {
+            throw 'installer.msi is not validly signed by the TortoiseGit maintainer'
+          }
+
+      - name: Download lessmsi
+        run: |
+          Invoke-WebRequest "https://github.com/activescott/lessmsi/releases/download/v$env:LESSMSI_VERSION/lessmsi-v$env:LESSMSI_VERSION.zip" -OutFile lessmsi.zip
+          Expand-Archive lessmsi.zip -DestinationPath lessmsi -Force
+
+      - name: Extract installer
+        run: |
+          if (Test-Path installation) { Remove-Item installation -Recurse -Force }
+          .\lessmsi\lessmsi.exe x installer.msi "installation\"
+          if ($LASTEXITCODE) { throw "lessmsi failed with exit code $LASTEXITCODE" }
+
+      - name: Locate and check portable folder
+        run: |
+          $proc = Get-ChildItem installation -Recurse -Filter TortoiseGitProc.exe | Select-Object -First 1
+          if (-not $proc) { throw 'TortoiseGitProc.exe not found in extracted MSI' }
+          $root = $proc.Directory.Parent.FullName  # ...\TortoiseGit (contains bin\)
+          $found = $proc.VersionInfo.ProductVersion
+          Write-Host "Portable root: $root (TortoiseGitProc $found)"
+          if ($found -ne $env:TGIT_VERSION) { throw "Expected $env:TGIT_VERSION, got $found" }
+          "PORTABLE_ROOT=$root" >> $env:GITHUB_ENV
+
+      - name: Archive release
+        run: |
+          if (Test-Path $env:targetZip) { Remove-Item $env:targetZip }
+          Compress-Archive -Path "$env:PORTABLE_ROOT\*" -DestinationPath $env:targetZip
+          $zip = Get-Item $env:targetZip
+          Write-Host "$($zip.Name): $([math]::Round($zip.Length / 1MB, 1)) MB"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          type: 'zip'
-          directory: "installation/SourceDir/Program_Files/TortoiseGit"
-          filename: "${{ env.targetZip }}"
-          
+          name: tortoisegit-portable-${{ env.TGIT_VERSION }}
+          path: ${{ env.targetZip }}
+          compression-level: 0 # already a zip
+
       - name: Release prebuilt
+        if: ${{ !env.ACT }} # skipped when testing locally with act
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "installation/SourceDir/Program_Files/TortoiseGit/${{ env.targetZip }}"
+          artifacts: ${{ env.targetZip }}
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
