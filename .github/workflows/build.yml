@@ -19,11 +19,17 @@ jobs:
       # minor release (2.19.0.0), the files after the exact build (2.19.2.0).
       TGIT_VERSION: 2.19.2.0
       LESSMSI_VERSION: 2.12.9
+      # TortoiseGit location written into the bundled context-menu .reg files.
+      # Users who unpack elsewhere must regenerate them (see README).
+      CONTEXT_MENU_ROOT: C:\Apps\tortoisegit
       targetZip: tortoisegit-portable-${{ github.ref_name }}.zip
     defaults:
       run:
         shell: pwsh
     steps:
+      - name: Checkout scripts
+        uses: actions/checkout@v4
+
       - name: Download installer
         run: |
           $v = [version]$env:TGIT_VERSION
@@ -59,6 +65,12 @@ jobs:
           Write-Host "Portable root: $root (TortoiseGitProc $found)"
           if ($found -ne $env:TGIT_VERSION) { throw "Expected $env:TGIT_VERSION, got $found" }
           "PORTABLE_ROOT=$root" >> $env:GITHUB_ENV
+
+      - name: Generate context menu .reg files
+        run: |
+          # Icons are validated against the extracted DLL; paths in the files point at CONTEXT_MENU_ROOT.
+          python scripts/context_menu.py --root $env:PORTABLE_ROOT --reg-root $env:CONTEXT_MENU_ROOT --export-reg $env:PORTABLE_ROOT
+          if ($LASTEXITCODE) { throw "context_menu.py failed with exit code $LASTEXITCODE" }
 
       - name: Archive release
         run: |

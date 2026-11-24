@@ -15,6 +15,8 @@ Usage:
   python scripts\context_menu.py --root D:\tools\tgit  # install, custom location
   python scripts\context_menu.py --dry-run             # print what would be written
   python scripts\context_menu.py --uninstall           # remove the menu
+  python scripts\context_menu.py --export-reg out      # write out\context-menu-install.reg
+                                                       # and out\context-menu-uninstall.reg
 
 Writes only to HKEY_CURRENT_USER; no admin rights required.
 """
@@ -178,6 +180,38 @@ class Registry:
             pass
 
 
+class RegFile:
+    """Same interface as Registry, but records the changes as a .reg file."""
+
+    HKCU = "HKEY_CURRENT_USER"
+
+    def __init__(self):
+        self.lines = ["Windows Registry Editor Version 5.00", ""]
+        self.current_key = None
+
+    @staticmethod
+    def quote(text):
+        return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+    def set(self, subkey, name, value):
+        if subkey != self.current_key:
+            if self.lines[-1] != "":
+                self.lines.append("")
+            self.lines.append(f"[{self.HKCU}\\{subkey}]")
+            self.current_key = subkey
+        data = f"dword:{value:08x}" if isinstance(value, int) else self.quote(value)
+        self.lines.append(f"{'@' if name == '' else self.quote(name)}={data}")
+
+    def delete_tree(self, subkey):
+        self.lines.append(f"[-{self.HKCU}\\{subkey}]")
+        self.current_key = None
+
+    def save(self, path):
+        # regedit's own export format: UTF-16 LE with BOM, CRLF line endings
+        with open(path, "w", encoding="utf-16", newline="\r\n") as f:
+            f.write("\n".join(self.lines) + "\n\n")
+
+
 def remove_menu(reg, base):
     for name in TOP_LEVEL_KEYS + LEGACY_KEYS:
         reg.delete_tree(rf"{base}\{name}")
@@ -220,10 +254,21 @@ def main():
                         help=f"TortoiseGit folder containing bin\\ (default: {DEFAULT_ROOT})")
     parser.add_argument("--uninstall", action="store_true", help="remove the context menu")
     parser.add_argument("--dry-run", action="store_true", help="print registry changes only")
+    parser.add_argument("--export-reg", metavar="DIR",
+                        help="write install/uninstall .reg files to DIR instead of changing the registry")
+    parser.add_argument("--reg-root", metavar="PATH",
+                        help="with --export-reg: TortoiseGit path to write into the .reg files "
+                             "(default: --root). The DLL is still checked under --root.")
     args = parser.parse_args()
 
     if os.name != "nt":
         sys.exit("Run this script on Windows.")
+    if args.reg_root and not args.export_reg:
+        parser.error("--reg-root requires --export-reg")
+
+    if args.export_reg:
+        export_reg_files(args)
+        return
 
     reg = Registry(args.dry_run)
 
@@ -233,7 +278,17 @@ def main():
         print("[OK] TortoiseGit context menu removed.")
         return
 
-    bin_dir = os.path.join(os.path.abspath(args.root), "bin")
+    proc, icon = checked_paths(args.root)
+    for base, token, items, submenu_icon in TARGETS:
+        if args.dry_run:
+            print(f"[{base}]")
+        install_menu(reg, base, token, items, submenu_icon, proc, icon)
+    print("[OK] TortoiseGit context menu installed for folders, folder background and files.")
+
+
+def checked_paths(root, target_root=None):
+    """Validate TortoiseGit under `root`; return (proc path, icon function) for `target_root`."""
+    bin_dir = os.path.join(os.path.abspath(root), "bin")
     proc = os.path.join(bin_dir, "TortoiseGitProc.exe")
     dll = os.path.join(bin_dir, "TortoiseGit.dll")
     for path in (proc, dll):
@@ -245,14 +300,32 @@ def main():
         sys.exit(f"[ERROR] {dll} has no icon resource(s) {missing}; "
                  "this TortoiseGit version uses different IDs. Nothing was changed.")
 
+    if target_root:
+        target_bin = os.path.join(target_root, "bin")
+        proc = os.path.join(target_bin, "TortoiseGitProc.exe")
+        dll = os.path.join(target_bin, "TortoiseGit.dll")
+
     def icon(resource_id):
         return f'"{dll}",-{resource_id}'  # negative = resource ID, not index
 
+    return proc, icon
+
+
+def export_reg_files(args):
+    target_root = args.reg_root or os.path.abspath(args.root)
+    proc, icon = checked_paths(args.root, target_root)
+
+    install, uninstall = RegFile(), RegFile()
     for base, token, items, submenu_icon in TARGETS:
-        if args.dry_run:
-            print(f"[{base}]")
-        install_menu(reg, base, token, items, submenu_icon, proc, icon)
-    print("[OK] TortoiseGit context menu installed for folders, folder background and files.")
+        install_menu(install, base, token, items, submenu_icon, proc, icon)
+        remove_menu(uninstall, base)
+
+    os.makedirs(args.export_reg, exist_ok=True)
+    for name, reg in (("context-menu-install.reg", install), ("context-menu-uninstall.reg", uninstall)):
+        path = os.path.join(args.export_reg, name)
+        reg.save(path)
+        print(f"[OK] Wrote {path}")
+    print(f"     TortoiseGit path inside the .reg files: {target_root}")
 
 
 if __name__ == "__main__":
